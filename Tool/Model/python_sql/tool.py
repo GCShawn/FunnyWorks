@@ -12,14 +12,15 @@ Created on Mon Aug  3 13:26:46 2020
 
 @author: ShawnXiong
 """
-import psycopg2
+import psycopg2             #通过密钥连接数据库
 import pandas as pd
-import json
-import shutil
-import datetime
-import openpyxl
-from openpyxl.styles import Border,Side,Alignment,PatternFill,Font
-from openpyxl.utils import get_column_letter, column_index_from_string
+import json                 #读取JS密钥文件
+import shutil               #复制文件
+import datetime             #datetime时间模块
+import openpyxl             #excel文件读取写入
+import re                   #用于分析字符串
+from openpyxl.styles import Border,Side,Alignment,PatternFill,Font          #Excel格式
+from openpyxl.utils import get_column_letter, column_index_from_string      #Excel获取列名，列位置方法
 
 
 # In[2]:
@@ -257,67 +258,51 @@ def concat_func(x):
 
 # ## 列内数据操作
 
+# ### 时间变换
+
 # In[12]:
 
 
-#将一列Datetime改为Str
-def changeColDatetimeToStr(df_base,col):
+# 将一列Datetime改为Str
+def changeColTime(df_base, col, From, To):
     df = pd.DataFrame(df_base)
-    df[col] = df_base[col].apply(lambda x : x.strftime('%Y-%m-%d'))
+    if From == 'datetime' and To == 'str':
+        df[col] = df_base[col].apply(lambda x: x.strftime('%Y-%m-%d'))
+    if From == 'datetime' and To == 'date':
+        df[col] = df_base[col].apply(lambda x: x.date())
+    if From == 'date' and To == 'Datetime':
+        df[col] = df_base[col].apply(lambda x: pd.to_datetime(x))
+    if From == 'date' and To == 'str':
+        df[col] = df_base[col].apply(lambda x: str(x))
+    if From == 'str' and To == 'datetime':
+        df[col] = df_base[col].apply(lambda x: datetime.datetime.strptime(x, style))
+    if From == 'str' and To == 'date':
+        df[col] = df_base[col].apply(
+            lambda x: datetime.date(*map(int, x.split('-'))))
     return df
 
-#将一列Datetime改为Date
-def changeColDatetimeToDate(df_base,col):
-    df = pd.DataFrame(df_base)
-    df[col] = df_base[col].apply(lambda x : x.date())
-    return df
 
-#将一列Date改为Datetime
-def changeColDateToDatetime(df_base,col):
-    df = pd.DataFrame(df_base)
-    df[col] = df_base[col].apply(lambda x : pd.to_datetime(x))
-    return df
-
-#将一列Date改为Str
-def changeColDateToStr(df_base,col):
-    df = pd.DataFrame(df_base)
-    df[col] = df_base[col].apply(lambda x : str(x))
-    return df
-
-#将一列Str改为Datetime
-def changeColStrToDatetime(df_base,col,style = '%Y-%m-%d'):
-    df = pd.DataFrame(df_base)
-    df[col] = df_base[col].apply(lambda x : datetime.datetime.strptime(x, style))
-    return df
-    
-#将一列Str改为Date
-def changeColStrToDate(df_base,col):
-    df = pd.DataFrame(df_base)
-    df[col] = df_base[col].apply(lambda x : datetime.date(*map(int, x.split('-'))))
-    return df
-    
-#将形如2020-10-10的日期改为Date
-def changeStrToDate(str):
-    date = datetime.date(*map(int, date_str.split('-')))
-    return date
-
-#修改Date到Datetime
-def changeDateToDatetime(date):
-    datetime = pd.to_datetime(date)
-    return datetime
-
-#修改Datetime为Date
-def changeDatetimeToDate(datetime):
-    date = datetime.datetime.date(datetime.datetime.strptime(x.strftime('%Y%m%d'), '%Y%m%d'))
-    return date
+def changeCellTime(time, From, To):
+    if From == 'str' and To == 'date':
+        Output = datetime.date(*map(int, time.split('-')))
+    if From == 'str' and To == 'datetime':
+        Output = datetime.datetime.strptime(time, '%Y-%m-%d')
+    if From == 'date' and To == 'datetime':
+        Output = pd.to_datetime(time)
+    if From == 'date' and To == 'str':
+        Output = str(time)
+    if From == 'datetime' and To == 'date':
+        Output = datetime.datetime.date(datetime.datetime.strptime(time.strftime('%Y%m%d'), '%Y%m%d'))
+    if From == 'datetime' and To == 'str':
+        Output = time.strftime('%Y-%m-%d')
+    return Output
 
 
-# ## 行数据操作
+# ### 根据字典变换列数据
 
 # In[13]:
 
 
-#修改列数据
 def changeColData(df_base,col,dic):
     df = pd.DataFrame(df_base)
     df[col] = df[col].apply(lambda x: dic[x])
@@ -329,10 +314,9 @@ def changeColData(df_base,col,dic):
 # In[14]:
 
 
-#修改列名
-def changeCol(df_base,dic,inplace = True):
+def changeCol(df_base,dic):
     df = pd.DataFrame(df_base)
-    df.rename(columns = dic, inplace = inplace)
+    df.rename(columns = dic, inplace = True)
     return df
 
 
@@ -341,94 +325,134 @@ def changeCol(df_base,dic,inplace = True):
 # In[15]:
 
 
-#保留两位小数
-def keepDecimalPlaces(df_base,col):
+# 保留两位小数
+def keepDecimalPlaces(df_base, col, roundnum=2):
     df = pd.DataFrame(df_base)
-    df[col] = df[col].apply(lambda x: round(x, 2))
+    df[col] = df[col].apply(lambda x: round(x, roundnum))
     return df
 
-#修改指定列的列宽（使用字典
-def changeColWidthByDic(ws,dic_col_width):
-    dic = {}
-    for i in range(1,len(ws[1])+1):
-        if ws[1][i-1].value in dic_col_width: 
-            dic[get_column_letter(i)] = dic_col_width[ws[1][i-1].value]
 
-    for i in dic.keys():
-        ws.column_dimensions[i].width = dic[i]
+# ## 行数据操作
 
-#从头到未修改列宽（使用列表
-def changeColWidthByList(ws,lis):
-    for i in range(1,len(lis)+1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = lis[i-1]
+# In[16]:
 
-        
+
+#通过列表删除行数据
+def delRows(df_base,col_name,list_row_del):
+    df = pd.DataFrame(df_base)
+    for i in list_row_del:
+        df.drop(df[df[col_name]==i].index, inplace=True)
+    return df
 
 
 # # 修改格式
 
 # ## 框线
 
-# In[16]:
+# In[17]:
 
 
-#给sheet绘制全框线
-def drawAllaround(ws, color = '000000'):
-    all_border = Border(left=Side(border_style='thin',color='000000'),
-                    right=Side(border_style='thin',color='000000'),
-                    top=Side(border_style='thin',color='000000'),
-                    bottom=Side(border_style='thin',color='000000'))
+# 给sheet绘制全框线
+def drawAllaround(ws, color='000000'):
+    all_border = Border(left=Side(border_style='thin', color='000000'),
+                        right=Side(border_style='thin', color='000000'),
+                        top=Side(border_style='thin', color='000000'),
+                        bottom=Side(border_style='thin', color='000000'))
     for row in ws.rows:
         for cell in row:
             cell.border = all_border
 
-#绘制中间框线,输入线左一列数字
-def drawLine(ws,ws_col, mid_color = 'FF0000'):
-    thick_right = Border(left=Side(border_style='thin',color='000000'),
-                        right=Side(border_style='thick',color=mid_color),
-                        top=Side(border_style='thin',color='000000'),
-                        bottom=Side(border_style='thin',color='000000'))
-    
-    thick_left = Border(left=Side(border_style='thick',color='000000'),
-                        right=Side(border_style='thin',color=mid_color),
-                        top=Side(border_style='thin',color='000000'),
-                        bottom=Side(border_style='thin',color='000000'))
-    for i in range(1,ws.max_row+1):
+
+# 绘制中间框线,线加入在所填写列的右边一侧
+def drawLine(ws, ws_col, row_from=1, rows_to=None, mid_color='FF0000'):
+    if rows_to == None:
+        rows_to = ws.max_row
+    if type(ws_col) == str:
+        ws_col = column_index_from_string(ws_col)  # 从字母获得数字
+        # 另外，数字获得字母的语句是get_column_letter(ws_col)
+
+    thick_right = Border(left=Side(border_style='thin', color='000000'),
+                         right=Side(border_style='thick', color=mid_color),
+                         top=Side(border_style='thin', color='000000'),
+                         bottom=Side(border_style='thin', color='000000'))
+
+    thick_left = Border(left=Side(border_style='thick', color='000000'),
+                        right=Side(border_style='thin', color=mid_color),
+                        top=Side(border_style='thin', color='000000'),
+                        bottom=Side(border_style='thin', color='000000'))
+
+    for i in range(row_from, rows_to+1):
         ws[i][ws_col-1].border = thick_right
-        ws[i][ws_col].border = thick_left    
+        ws[i][ws_col].border = thick_left
 
 
 # ## 位置操作
 
-# In[17]:
+# ### 全表操作
+
+# In[18]:
 
 
-#列居中
+# 全表列居中
 def changeToMiddle(ws):
     for row in ws.rows:
         for cell in row:
             cell.alignment = Alignment(horizontal='center', vertical='center')
-#列居左居右
-def changeColAlignment(ws,hori_posi,col_start,col_end):
-    align = Alignment(horizontal=hori_posi, vertical='center')
-    if type(col_start) == str:
-        col_start = column_index_from_string(col_start)
-    if type(col_end) == str:
-        col_end = column_index_from_string(col_end)
-    #不修改题头
-    for i in range(2,ws.max_row+1):
-        for j in range(col_start,col_end+1):
-            ws.cell(i,j).alignment = align
             
-#居左居右单区域操作
-def changeAlignment(ws,hori_posi,cell_start,cell_end):
-    align = Alignment(horizontal=hori_posi, vertical='center')
+# 全表列首居中
+def middleHead(ws):
+    max_col = ws.max_column
+    for i in range(0, max_col):
+        ws[1][i].alignment = Alignment(horizontal='center', vertical='center')
+
+
+# ### 局部操作
+
+# In[21]:
+
+
+# 居左居右矩形区域操作，默认为全表居中
+def changeAlignment(ws, hori_posi='center', verti_posi='center', cell_start=None, cell_end=None, col_flag = False):
+    #获得数字的正则表达式是''.join(re.findall(r'\d+\.?\d*'', cell_start))
+    if col_flag == True:
+        if cell_start == None:
+            cell_start = 'A1'
+        else:
+            cell_start = ''.join(re.findall(r'[A-Za-z]', cell_start)) + '1'
+            
+        if cell_end == None:
+            cell_end = get_column_letter(ws1.max_column) + str(ws1.max_row)
+        else:
+            cell_end = ''.join(re.findall(r'[A-Za-z]', cell_end)) + str(ws1.max_row)
+            
+    else:
+        if cell_start == None:
+            cell_start = 'A1'
+            
+        if cell_end == None:
+            cell_end = get_column_letter(ws1.max_column) + str(ws1.max_row)
+    
+    align = Alignment(horizontal = hori_posi, vertical = verti_posi)
     for rows in ws[cell_start:cell_end]:
         for cell in rows:
             cell.alignment = align
 
             
-#根据列表设置居中
+            
+# 按列居左居右
+def changeColAlignment(ws, hori_posi='center', verti_posi='center', col_start = None, col_end = None):
+    align = Alignment(horizontal=hori_posi, vertical=verti_posi)
+    if type(col_start) == str:
+        col_start = column_index_from_string(col_start)
+    if type(col_end) == str:
+        col_end = column_index_from_string(col_end)
+    # 不修改题头
+    for i in range(2, ws.max_row+1):
+        for j in range(col_start, col_end+1):
+            ws.cell(i, j).alignment = align
+
+            
+#根据列名设置居中
 def changeToMiddleByList(ws,lis,h_position='center',v_position='center'):
     dic = {}
     for i in range(1,len(ws[1])+1):
@@ -440,29 +464,35 @@ def changeToMiddleByList(ws,lis,h_position='center',v_position='center'):
             cell.alignment = Alignment(horizontal=h_position, vertical=v_position)
 
             
-def middleHead(ws):
-    max_col = ws.max_column
-    for i in range(0,max_col):
-        ws[1][i].alignment = Alignment(horizontal = 'center',vertical = 'center')
-            
-    
-            
-#在指定位置插入列，默认为col后
-def insertCol(df,col, col_insert_name, value, posi = 1):
+# 在col_insert_name后插入列
+def insertCol(df, col, col_insert_name, value, posi=1):
     df.insert(list(df.columns).index(col)+posi, col_insert_name, value)
 
 
-# ## 颜色操作
+# ## 宽度操作
+# 
 
-# In[ ]:
+# In[22]:
 
 
+# 通过字典或者列表修改指定列的列宽
+def changeColWidth(ws, using):
+    if type(using) == dict:
+        dic = {}
+        for i in range(1, len(ws[1])+1):
+            if ws[1][i-1].value in using:
+                dic[get_column_letter(i)] = using[ws[1][i-1].value]
 
+        for i in dic.keys():
+            ws.column_dimensions[i].width = dic[i]
+    if type(using) == list:
+        for i in range(1, len(using)+1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = using[i-1]
 
 
 # # 字典
 
-# In[18]:
+# In[23]:
 
 
 dic_col_1 = {'contract_gid': '合同GID', 'contract_name': '合同名称', 'contract_paydue_type': '合同收款节点类型', 
@@ -491,13 +521,13 @@ dic_milestone_name = {"PRSRT": "项目启动", "ASIS": "现状调研", "TOBE": "
 
 # # 输出为.py文件
 
-# In[19]:
+# In[24]:
 
 
 try:  
-  get_ipython().system('jupyter nbconvert --to python tool.ipynb')
-  # python即转化为.py，script即转化为.html
-  # file_name.ipynb即当前module的文件名
+    get_ipython().system('jupyter nbconvert --to python tool.ipynb')
+    # python即转化为.py，script即转化为.html
+    # file_name.ipynb即当前module的文件名
 except:
-  pass
+    pass
 
