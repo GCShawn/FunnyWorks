@@ -16,10 +16,10 @@ from openpyxl.styles import Border,Side,Alignment,PatternFill,Font
 # 修改输入输出
 
 #time_record = "当前时间"
+# date_now = tool.setTime(time_record,date_str)
 
 time_record = "固定时间"
 date_str = '2021-1-01'
-
 date_now = tool.setTime(time_record,date_str)
 
 datetime_now = pd.to_datetime(date_now)
@@ -53,7 +53,7 @@ key_orgin = r'/origin.json'
 
 #---------------自动操作---------------#
 key = tool.getKeyFromJson(key_path,key_test,key_orgin,key_flag)
-sql_cur = tool.connectDatabase(key)
+sql_conn,sql_cur = tool.connectDatabase(key)
 #---------------自动操作---------------#
 
 #---------------SQL存放地址---------------#
@@ -94,6 +94,9 @@ tool.getDataFromSQLList(sql_var_names, sql_cur, sql_path, sql_array, replacing)
 
 # In[ ]:
 # ###写入文件
+
+sql_cur.close()
+sql_conn.close()
 with pd.ExcelWriter(output_path + output_name, engine='xlsxwriter') as writer:
     df_.to_excel(writer, sheet_name='【sheet1】', index=False)#dataframe to excel
     
@@ -105,16 +108,16 @@ with pd.ExcelWriter(output_path + output_name, engine='xlsxwriter') as writer:
 if 1 == 1:
     print('↓'*15 + "开始修改格式" + '↓'*15)
     wb = openpyxl.load_workbook(output_path + output_name)
-    ws = wb["【sheet1】"]
+    ws1 = wb["【sheet1】"]
 
     dic_col_width = {"项目名称":23,"项目GID":19,"项目经理姓名":14}#需要修改列宽的列名
     middle_list = ["项目GID","项目经理姓名","项目总监姓名"]#需要居中的列名
 
     #修改列宽
-    tool.changeColWidthByDic(ws, dic_col_width)
+    tool.changeColWidthByDic(ws1, dic_col_width)
 
     #全框线
-    tool.drawAllaround(ws)
+    tool.drawAllaround(ws1)
 
     #根据列名居中
     tool.changeToMiddleByList(ws1,middle_list)
